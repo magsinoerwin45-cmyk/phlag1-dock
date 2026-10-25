@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>PHLAG1 Dock Receiving</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--brand:#ee4d2d;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#2563eb}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f3f4f6;color:var(--ink)}
+  header{background:#111827;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:0;z-index:5}
+  header b{font-size:16px}
+  .who{background:#374151;border:0;color:#fff;border-radius:99px;padding:6px 12px;font-size:13px}
+  .sync{font-size:12px;color:#9ca3af}
+  main{padding:12px;max-width:560px;margin:0 auto}
+  .card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .big{display:block;width:100%;border:0;border-radius:14px;padding:18px;font-size:19px;font-weight:700;color:#fff;cursor:pointer}
+  .scanbtn{background:var(--brand)}
+  .okbtn{background:var(--ok)}
+  .gray{background:#e5e7eb;color:var(--ink)}
+  .row{display:flex;gap:8px}
+  input[type=text],input[type=search]{width:100%;font-size:20px;padding:14px;border:2px solid #111827;border-radius:12px;font-family:ui-monospace,Consolas,monospace}
+  #reader{width:100%;border-radius:12px;overflow:hidden;background:#000}
+  .muted{color:var(--muted);font-size:13px}
+  .item{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid #f1f2f4}
+  .item:last-child{border-bottom:0}
+  .item .id{font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:16px;word-break:break-all}
+  .item .sub{font-size:12.5px;color:var(--muted)}
+  .item input[type=checkbox]{width:28px;height:28px;flex:none}
+  .tag{font-size:11.5px;font-weight:700;border-radius:99px;padding:3px 8px;color:#fff;white-space:nowrap}
+  .banner{border-radius:12px;padding:12px 14px;font-weight:700;margin-bottom:10px}
+  .b-ok{background:#dcfce7;color:#14532d}.b-warn{background:#fef3c7;color:#78350f}.b-bad{background:#fee2e2;color:#7f1d1d}.b-info{background:#dbeafe;color:#1e3a8a}
+  .asnbig{font-family:ui-monospace,Consolas,monospace;font-size:22px;font-weight:800;word-break:break-all}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin:8px 0 12px}
+  .kv span:nth-child(odd){color:var(--muted)}
+  /* full-screen scanner */
+  #camWrap.fs{position:fixed;inset:0;z-index:30;background:#000}
+  #camWrap.fs #live{position:absolute;inset:0;border:0!important}
+  #live video{width:100%!important;height:100%!important;object-fit:cover}
+  #live img,#live #qr-shaded-region{display:none!important}
+  .guide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .gbox{width:86%;height:30%;border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.28)}
+  .ghint{color:#fff;font-size:13px;margin-top:10px;text-shadow:0 1px 3px #000}
+  .guide.focus .gbox{border-color:#fde047}
+  .camTop{position:absolute;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:12px;color:#fff;background:linear-gradient(rgba(0,0,0,.65),transparent)}
+  .camBottom{position:absolute;bottom:0;left:0;right:0;padding:12px 12px 22px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+  .cbtn{border:0;border-radius:12px;background:rgba(255,255,255,.18);color:#fff;font-size:20px;padding:10px 13px;font-weight:700}
+  .cbtn.on{background:#fde047;color:#111}
+  .cbtn.stop{background:#dc2626;font-size:15px;padding:12px 14px}
+  #liveLog .banner{margin:6px 0!important}
+  #liveLog .banner:nth-child(n+3){display:none}
+  .flash{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:40;opacity:.92;color:#fff;text-align:center;padding:20px}
+  .flash .t{font-size:30px;font-weight:800}
+  .flash .s{font-size:18px;margin-top:8px;font-family:ui-monospace,Consolas,monospace;word-break:break-all;white-space:pre-line}
+  .link{background:none;border:0;color:var(--info);font-size:14px;text-decoration:underline;padding:4px 0;cursor:pointer}
+  .switch{display:flex;align-items:center;gap:8px;font-size:14px}
+  .switch input{width:22px;height:22px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:15;padding:16px}
+  .modal .box{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px}
+  .stick{position:sticky;bottom:0;background:#fff;padding-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <div><b>PHLAG1 Dock Receiving</b><div class="sync" id="sync">connecting…</div></div>
+  <button class="who" id="whoBtn" onclick="askName()">👤 set name</button>
+</header>
+
+<main>
+  <div class="card">
+    <div id="liveBox" style="display:none;margin-bottom:10px">
+      <button class="big scanbtn" id="liveBtn" onclick="startLive()">📷 Start continuous scan</button>
+      <div id="camWrap" style="display:none">
+        <div id="live"></div>
+        <div class="guide" id="guide"><div class="gbox"></div><div class="ghint">Tap screen to focus</div></div>
+        <div class="camTop">
+          <div style="flex:1"><b id="sessCount" style="font-size:18px">0 tagged</b><div style="font-size:12px;opacity:.8">Point at the next barcode</div></div>
+          <button class="cbtn" id="torchBtn" style="display:none" onclick="toggleTorch()">🔦</button>
+          <button class="cbtn" id="lensBtn" style="display:none" onclick="switchLens()">🔄</button>
+          <button class="cbtn stop" onclick="stopLive()">✕ Stop</button>
+        </div>
+        <div class="camBottom">
+          <div id="zoomRow" style="display:none;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:13px">Zoom</span><input type="range" id="zoom" style="flex:1">
+            <b id="zoomVal" style="font-size:13px;width:38px;text-align:right">1x</b>
+          </div>
+          <div id="liveLog"></div>
+        </div>
+      </div>
+    </div>
+    <label class="big scanbtn" id="scanBtn" style="text-align:center">📷 Scan barcode
+      <input type="file" accept="image/*" capture="environment" id="photo" style="display:none"></label>
+    <p class="muted" id="photoHint" style="margin:8px 2px 0">Camera opens → take a clear photo of the barcode (fill the frame, avoid glare) → ✓</p>
+    <div id="reading" class="banner b-info" style="display:none;margin:10px 0 0">⏳ Reading barcode…</div>
+    <div id="reader" style="display:none"></div>
+    <div class="row" style="margin-top:10px;align-items:center;justify-content:flex-end">
+      <label class="switch"><input type="checkbox" id="auto"> Auto-tag on ASN scan</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted" style="margin-bottom:6px">No barcode? Type the ASN or PO (last 4 digits are enough)</div>
+    <input type="search" id="q" inputmode="text" autocomplete="off" placeholder="e.g. 0045">
+    <div id="matches"></div>
+  </div>
+
+  <div class="card" id="result" style="display:none"></div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <b>My tags today</b><span class="muted" id="myCount"></span>
+    </div>
+    <div id="mine"></div>
+  </div>
+</main>
+
+<div class="flash" id="flash"><div class="t" id="flashT"></div><div class="s" id="flashS"></div></div>
+
+<div class="modal" id="nameModal">
+  <div class="box">
+    <h3 style="margin:0 0 8px">Who is receiving?</h3>
+    <p class="muted">Your name is saved on this phone and recorded on every ASN you tag.</p>
+    <input type="text" id="nameIn" placeholder="Your name" style="font-family:inherit">
+    <button class="big okbtn" style="margin-top:12px" onclick="saveName()">Start</button>
+  </div>
+</div>
+
+<script>
+/* ---------- state ---------- */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(Number(n)||0).toLocaleString();
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
+let ROWS=[], BY_ASN={}, BY_PO={}, TODAY='', NAME=ls('dockName')||'', QUEUE=[], scanner=null, busy=false, online=true;
+try{QUEUE=JSON.parse(ls('dockQueue')||'[]');}catch(e){QUEUE=[];}
+$('auto').checked=ls('dockAuto')!=='0';
+$('auto').addEventListener('change',e=>ls('dockAuto',e.target.checked?'1':'0'));
+// row: [asn, po, fd, qty, lines, vas, delivered, taggedAt, taggedBy, result]
+const A=0,P=1,FD=2,Q=3,L=4,V=5,D=6,TA=7,TB=8,R=9;
+
+/* ---------- server connection ----------
+   Inside Apps Script → google.script.run (photo scan only).
+   On GitHub Pages     → fetch() to the Apps Script web app (live continuous scan). */
+const IN_GAS=!!(window.google&&google.script&&google.script.run);
+(function(){ const h=new URLSearchParams(location.hash.slice(1));
+  if(h.get('api')){ ls('dockApi',h.get('api')); ls('dockK',h.get('k')||''); history.replaceState(null,'',location.pathname); } })();
+const API=ls('dockApi')||'', KEY=ls('dockK')||'';
+function unwrap(o){ if(!o||!o.ok) throw new Error(o&&o.error||'Server error'); return o.data; }
+function run(fn,arg){
+  if(IN_GAS) return new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](arg));
+  if(!API) return Promise.reject(new Error('Open this page by scanning the QR on the laptop (📱 Dock phones).'));
+  if(fn==='getDockData') return fetch(API+'?api=dock&k='+encodeURIComponent(KEY)).then(r=>r.json()).then(unwrap);
+  return fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({k:KEY,fn:fn==='tagAsns'?'tag':fn,req:arg})}).then(r=>r.json()).then(unwrap);
+}
+let linkWarned=false;
+function linkError(e){ const m=String(e&&e.message||e); if(/dock link|QR/i.test(m)&&!linkWarned){ linkWarned=true; alert(m); } return m; }
+
+/* ---------- data ---------- */
+function index(){
+  BY_ASN={}; BY_PO={};
+  ROWS.forEach(r=>{ BY_ASN[String(r[A]).toUpperCase()]=r; const p=String(r[P]||'').toUpperCase(); if(p)(BY_PO[p]=BY_PO[p]||[]).push(r); });
+  // apply tags still waiting in the offline queue
+  QUEUE.forEach(q=>q.ids.forEach(id=>{const r=BY_ASN[id]; if(r&&!r[D]){r[D]=1;r[TA]=q.at;r[TB]=NAME;r[R]='(syncing)';}}));
+}
+function refresh(){
+  run('getDockData').then(d=>{
+    ROWS=d.rows; TODAY=d.today; online=true; index(); renderMine(); setSync();
+    if($('q').value) search();
+  }).catch(e=>{ linkError(e); online=false; setSync(); });
+}
+function setSync(){
+  $('sync').textContent=(online?'● online':'○ offline')+(QUEUE.length?` · ${QUEUE.length} waiting to sync`:` · ${ROWS.length} ASNs loaded`);
+  $('sync').style.color=QUEUE.length?'#fbbf24':(online?'#86efac':'#fca5a5');
+}
+setInterval(()=>{ if(!document.hidden){ flushQueue(); refresh(); } },45000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ flushQueue(); refresh(); }});
+
+/* ---------- name ---------- */
+function askName(){ $('nameIn').value=NAME; $('nameModal').style.display='flex'; setTimeout(()=>$('nameIn').focus(),50); }
+function saveName(){ const n=$('nameIn').value.trim(); if(!n) return; NAME=n; ls('dockName',n); $('nameModal').style.display='none'; $('whoBtn').textContent='👤 '+n; }
+if(NAME) $('whoBtn').textContent='👤 '+NAME; else askName();
+
+/* ---------- feedback ---------- */
+function flash(color,title,sub,ms=1300){
+  const f=$('flash'); f.style.background=color; $('flashT').textContent=title; $('flashS').textContent=sub||''; f.style.display='flex';
+  try{navigator.vibrate&&navigator.vibrate(color===getVar('--ok')?120:[80,60,80]);}catch(e){}
+  beep(color===getVar('--ok')?880:300);
+  clearTimeout(f._h); f._h=setTimeout(()=>f.style.display='none',ms); f.onclick=()=>f.style.display='none';
+}
+function getVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+let actx=null; function beep(freq){ try{actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const o=actx.createOscillator(),g=actx.createGain(); o.frequency.value=freq; o.connect(g); g.connect(actx.destination); g.gain.value=.15; o.start(); o.stop(actx.currentTime+.15);}catch(e){} }
+
+/* ---------- barcode from photo ----------
+   Google Apps Script pages run in a frame that blocks live camera, so we use
+   the phone's own camera app (file capture) and decode the photo. */
+$('photo').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('reading').style.display='block';
+  try{
+    const codes=await decodePhoto(f);
+    if(!codes.length) throw new Error('none');
+    // a document may carry several barcodes (ASN, PO, tracking no.) – prefer a known ASN, then a known PO
+    const known=codes.map(extractKnown);
+    const best=known.find(m=>m.type==='asn')||known.find(m=>m.type==='po')||known[0];
+    handleCode(best.id,true);
+  }catch(err){
+    flash(getVar('--bad'),'NO BARCODE FOUND','Retake closer and steady,\nor type the last 4 digits',2000);
+  }finally{ $('reading').style.display='none'; e.target.value=''; }
+});
+
+async function decodePhoto(file){
+  // 1) native detector (fast, reads several barcodes at once – Android Chrome)
+  if('BarcodeDetector' in window){
+    try{
+      const bmp=await createImageBitmap(file);
+      const r=await new BarcodeDetector().detect(bmp);
+      if(r.length) return r.map(x=>x.rawValue);
+    }catch(e){}
+  }
+  // 2) library fallback, tried at a few sizes (big phone photos often fail at full size)
+  if(window.Html5Qrcode){
+    for(const max of [1400,900,2200]){
+      try{
+        const small=await resizeImage(file,max);
+        const t=await new Html5Qrcode('reader').scanFile(small,false);
+        if(t) return [t];
+      }catch(e){}
+    }
+  }
+  return [];
+}
+function resizeImage(file,max){
+  return new Promise((res,rej)=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const k=Math.min(1,max/Math.max(img.width,img.height));
+      const c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+      c.toBlob(b=>b?res(new File([b],'scan.jpg',{type:'image/jpeg'})):rej(),'image/jpeg',.92);
+    };
+    img.onerror=rej; img.src=url;
+  });
+}
+
+/* ---------- matching ---------- */
+function extractKnown(raw){
+  const c=String(raw||'').trim().toUpperCase().replace(/\s+/g,'');
+  if(BY_ASN[c]) return {type:'asn',id:c};
+  if(BY_PO[c]) return {type:'po',id:c};
+  for(const k in BY_ASN) if(c.includes(k)) return {type:'asn',id:k};   // barcode with extra text
+  for(const k in BY_PO) if(c.includes(k)) return {type:'po',id:k};
+  return {type:'none',id:c};
+}
+function handleCode(raw,fromScan){
+  const m=extractKnown(raw);
+  $('q').value=''; $('matches').innerHTML='';
+  if(m.type==='asn'){
+    const r=BY_ASN[m.id];
+    if(fromScan && $('auto').checked && !r[D]){ doTag([r[A]]); return; }
+    showAsn(r);
+  } else if(m.type==='po'){ showPo(m.id); }
+  else { showUnknown(m.id); }
+}
+$('q').addEventListener('input',search);
+$('q').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); const t=$('q').value.trim(); const hits=findMatches(t); if(hits.length===1) pick(hits[0]); else if(!hits.length && t.length>=10) handleCode(t,false); }});
+function findMatches(t){
+  t=t.trim().toUpperCase().replace(/\s+/g,''); if(t.length<3) return [];
+  const out=[];
+  Object.keys(BY_PO).forEach(p=>{ if(p.endsWith(t)||p===t||(t.length>=6&&p.includes(t))) out.push({type:'po',id:p}); });
+  ROWS.forEach(r=>{ const a=String(r[A]).toUpperCase(); if(a.endsWith(t)||(t.length>=6&&a.includes(t))) out.push({type:'asn',id:a}); });
+  return out;
+}
+function search(){
+  const t=$('q').value; const hits=findMatches(t);
+  if(t.trim().length<3){ $('matches').innerHTML=t.trim()?'<p class="muted">Type at least 3 characters…</p>':''; return; }
+  if(!hits.length){ $('matches').innerHTML=`<p class="muted">No match in forecast. Press Enter with the full ID to tag it as unforecasted.</p>`; return; }
+  hits.sort((a,b)=>(a.type==='po')-(b.type==='po') || (BY_ASN[a.id]?BY_ASN[a.id][D]:0)-(BY_ASN[b.id]?BY_ASN[b.id][D]:0));
+  $('matches').innerHTML=hits.slice(0,25).map((h,i)=>{
+    if(h.type==='po'){ const l=BY_PO[h.id], d=l.filter(r=>r[D]).length;
+      return `<div class="item" onclick="pickIdx(${i})"><div style="flex:1"><div class="id">PO ${esc(h.id)}</div><div class="sub">${l.length} ASNs · ${d} delivered</div></div><span class="tag" style="background:#374151">PO</span></div>`; }
+    const r=BY_ASN[h.id];
+    return `<div class="item" onclick="pickIdx(${i})"><div style="flex:1"><div class="id">${hl(r[A],$('q').value)}</div><div class="sub">PO ${esc(r[P])} · ${fmt(r[Q])} units · fcst ${esc(r[FD]||'—')}</div></div>${stTag(r)}</div>`;
+  }).join('')+(hits.length>25?`<p class="muted">${hits.length-25} more… type more digits</p>`:'');
+  window._hits=hits;
+}
+function hl(id,t){ id=String(id); t=t.trim().toUpperCase(); const i=id.toUpperCase().lastIndexOf(t); return i<0?esc(id):esc(id.slice(0,i))+'<span style="background:#fde68a">'+esc(id.slice(i,i+t.length))+'</span>'+esc(id.slice(i+t.length)); }
+function pickIdx(i){ pick(window._hits[i]); }
+function pick(h){ $('q').value=''; $('matches').innerHTML=''; h.type==='po'?showPo(h.id):showAsn(BY_ASN[h.id]); }
+function stTag(r){
+  if(r[D]) return '<span class="tag" style="background:var(--ok)">Delivered</span>';
+  if(r[FD] && r[FD]<TODAY) return '<span class="tag" style="background:var(--bad)">Overdue</span>';
+  if(r[FD]===TODAY) return '<span class="tag" style="background:#6b7280">Due today</span>';
+  return '<span class="tag" style="background:#94a3b8">'+(r[FD]?'Fcst '+esc(r[FD].slice(5)):'—')+'</span>';
+}
+
+/* ---------- result cards ---------- */
+function poLine(po){
+  const l=BY_PO[String(po||'').toUpperCase()]||[]; if(!l.length) return '';
+  const d=l.filter(r=>r[D]).length, miss=l.length-d;
+  const cls=miss===0?'b-ok':d?'b-warn':'b-info';
+  return `<div class="banner ${cls}">PO ${esc(po)}: ${d} of ${l.length} ASNs delivered${miss?` · ${miss} still missing`:' · complete ✅'}
+    <br><button class="link" onclick="showPo('${esc(String(po).toUpperCase())}')">Open this PO's ASN list</button></div>`;
+}
+function showAsn(r){
+  const box=$('result'); box.style.display='block';
+  const late=r[FD]&&r[FD]<TODAY, early=r[FD]&&r[FD]>TODAY;
+  box.innerHTML=(r[D]?`<div class="banner b-info">Already tagged delivered · ${esc(r[TA])} · ${esc(r[TB])}</div>`:
+      late?`<div class="banner b-warn">Forecasted ${esc(r[FD])} (late)</div>`:early?`<div class="banner b-info">Forecasted ${esc(r[FD])} (early)</div>`:'')+
+    `<div class="asnbig">${esc(r[A])}</div>
+     <div class="kv"><span>PO</span><span>${esc(r[P])}</span><span>Forecast</span><span>${esc(r[FD]||'—')}</span>
+     <span>Expected</span><span>${fmt(r[Q])} units · ${fmt(r[L])} SKU lines</span><span>VAS</span><span>${esc(r[V]||'N')}</span></div>`+
+    (r[D]?'':`<button class="big okbtn" onclick="doTag(['${esc(r[A])}'])">✔ TAG DELIVERED</button>`)+
+    `<div style="margin-top:10px">${poLine(r[P])}</div>`;
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function showPo(po){
+  const l=(BY_PO[po]||[]).slice().sort((a,b)=>a[D]-b[D]||String(a[A]).localeCompare(String(b[A])));
+  const d=l.filter(r=>r[D]).length;
+  const box=$('result'); box.style.display='block';
+  box.innerHTML=`<div class="banner ${d===l.length?'b-ok':d?'b-warn':'b-info'}">PO ${esc(po)} · ${d} of ${l.length} delivered</div>
+    <input type="search" id="poFind" placeholder="Find ASN (last digits)" style="font-size:17px;padding:11px;margin-bottom:6px">
+    <div id="poList">`+l.map(r=>`<label class="item" data-asn="${esc(String(r[A]).toUpperCase())}">
+      ${r[D]?'<span style="width:28px;text-align:center">✅</span>':`<input type="checkbox" class="pck" value="${esc(r[A])}" onchange="poSel()">`}
+      <div style="flex:1"><div class="id">${esc(r[A])}</div><div class="sub">${fmt(r[Q])} units · fcst ${esc(r[FD]||'—')}${r[D]?' · '+esc(r[TB]):''}</div></div>${stTag(r)}</label>`).join('')+
+    `</div>`+(d<l.length?`<div class="stick"><button class="big okbtn" id="poTagBtn" onclick="tagPo()">Tick the ASNs that arrived</button></div>`:'');
+  $('poFind').addEventListener('input',e=>{const t=e.target.value.trim().toUpperCase(); document.querySelectorAll('#poList .item').forEach(it=>it.style.display=!t||it.dataset.asn.includes(t)?'':'none');});
+  poSel(); box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function poSel(){ const n=document.querySelectorAll('.pck:checked').length, b=$('poTagBtn'); if(b){ b.textContent=n?`✔ TAG ${n} ASN(s) DELIVERED`:'Tick the ASNs that arrived'; b.disabled=!n; b.style.opacity=n?1:.6; } }
+function tagPo(){ const ids=[...document.querySelectorAll('.pck:checked')].map(c=>c.value); if(ids.length) doTag(ids); }
+function showUnknown(id){
+  const box=$('result'); box.style.display='block';
+  const looksPO=/^FBS|^PO/i.test(id);
+  box.innerHTML=`<div class="banner b-bad">Not in forecast</div><div class="asnbig">${esc(id)}</div>`+
+    (looksPO?'<p class="muted">Looks like a PO that was not forecasted. Scan or type each ASN on the delivery instead.</p>':
+    `<p class="muted">If this ASN physically arrived, tag it. It will be recorded as <b>Unforecasted</b>.</p>
+     <input type="text" id="unfPo" placeholder="PO ID (optional)" style="font-size:16px;padding:11px;margin-bottom:10px">
+     <button class="big okbtn" onclick="doTag(['${esc(id)}'],$('unfPo').value)">Tag as delivered (unforecasted)</button>`);
+  flash(getVar('--bad'),'NOT IN FORECAST',id,1500);
+}
+
+/* ---------- tagging with offline queue ---------- */
+function nowStr(){ const d=new Date(Date.now()+8*3600e3); return d.toISOString().slice(0,19).replace('T',' '); }
+function doTag(ids,poId,quick){
+  if(!NAME){ askName(); return; }
+  ids=ids.map(x=>String(x).toUpperCase());
+  const job={ids:ids,poId:poId||'',at:nowStr(),receiver:NAME,id:Date.now()+Math.random()};
+  QUEUE.push(job); ls('dockQueue',JSON.stringify(QUEUE));
+  // optimistic local update
+  ids.forEach(id=>{ let r=BY_ASN[id]; if(!r){ r=[id,(poId||'').toUpperCase(),'',0,0,'',0,'','','Unforecasted']; ROWS.push(r); }
+    r[D]=1; r[TA]=job.at; r[TB]=NAME; if(r[R]!=='Unforecasted') r[R]='(syncing)'; });
+  index();
+  const r0=BY_ASN[ids[0]], po=r0&&r0[P];
+  const l=po?(BY_PO[String(po).toUpperCase()]||[]):[], miss=l.filter(r=>!r[D]).length;
+  flash(getVar('--ok'),ids.length>1?`✔ ${ids.length} ASNs TAGGED`:'✔ DELIVERED',
+    (ids.length>1?'PO '+po:ids[0])+(l.length?`\nPO ${miss?miss+' ASN(s) still missing':'complete'}`:''),quick?650:1300);
+  if(quick) liveLog('b-ok',`✔ ${esc(ids[0])}<br><span style="font-weight:400">PO ${esc(po||'—')}${l.length?` · ${miss?miss+' still missing':'complete ✅'}`:''}</span>`);
+  $('result').style.display='none'; renderMine(); setSync(); flushQueue();
+}
+function flushQueue(){
+  if(busy||!QUEUE.length) return; busy=true;
+  const job=QUEUE[0];
+  run('tagAsns',{ids:job.ids,action:'deliver',receiver:job.receiver,remarks:'',poId:job.poId,at:job.at}).then(()=>{
+    QUEUE.shift(); ls('dockQueue',JSON.stringify(QUEUE)); busy=false; online=true; setSync();
+    if(QUEUE.length) flushQueue(); else refresh();
+  }).catch(err=>{
+    busy=false; online=false; setSync(); const m=linkError(err);
+    if(/receiver|No ASN/i.test(m)){ QUEUE.shift(); ls('dockQueue',JSON.stringify(QUEUE)); }
+    setTimeout(flushQueue,15000);
+  });
+}
+function undo(id){
+  if(!confirmUndo(id)) return;
+  run('tagAsns',{ids:[id],action:'undo'}).then(()=>{ flash(getVar('--warn'),'UNDONE',id,1000); refresh(); })
+    .catch(e=>alert('Undo failed (offline?). '+(e&&e.message)));
+}
+function confirmUndo(id){ return window.confirm('Remove delivered tag from '+id+'?'); }
+function renderMine(){
+  const mine=ROWS.filter(r=>r[D]&&String(r[TA]).slice(0,10)===(TODAY||nowStr().slice(0,10))&&r[TB]===NAME)
+    .sort((a,b)=>String(b[TA]).localeCompare(String(a[TA])));
+  $('myCount').textContent=`${mine.length} ASNs · ${fmt(mine.reduce((s,r)=>s+(+r[Q]||0),0))} units`;
+  $('mine').innerHTML=mine.length?mine.slice(0,60).map(r=>`<div class="item"><div style="flex:1"><div class="id" style="font-size:14px">${esc(r[A])}</div>
+     <div class="sub">${esc(String(r[TA]).slice(11,16))} · PO ${esc(r[P])} · ${fmt(r[Q])} units ${r[R]==='(syncing)'?'· ⏳ syncing':''}</div></div>
+     <button class="link" style="color:var(--bad)" onclick="undo('${esc(r[A])}')">undo</button></div>`).join('')
+    :'<p class="muted">Nothing yet. Scan your first ASN.</p>';
+}
+
+/* ---------- continuous live scanning (GitHub Pages only) ---------- */
+let live=null, lastCode='', lastAt=0, sess=0, wake=null;
+if(!IN_GAS){
+  $('liveBox').style.display='block';
+  $('scanBtn').className='link'; $('scanBtn').style.cssText='display:block;text-align:center;font-size:14px';
+  $('scanBtn').firstChild.textContent='📸 Barcode won’t read live? Take a photo instead';
+  $('photoHint').style.display='none';
+}
+function startLive(camId){
+  if(!NAME){ askName(); return; }
+  if(!window.Html5Qrcode){ alert('Scanner could not load. Check signal, or type the ASN.'); return; }
+  live=live||new Html5Qrcode('live',{verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+  $('liveBtn').style.display='none'; $('camWrap').style.display='block'; $('camWrap').classList.add('fs');
+  try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){}
+  camId=camId||ls('dockCam')||'';
+  const vc={width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]};
+  if(camId) vc.deviceId={exact:camId}; else vc.facingMode='environment';
+  live.start(camId?{deviceId:{exact:camId}}:{facingMode:'environment'},
+    {fps:15, videoConstraints:vc}, onLive, ()=>{})
+  .then(()=>{ try{ navigator.wakeLock&&navigator.wakeLock.request('screen').then(w=>wake=w).catch(()=>{}); }catch(e){} setupControls(); })
+  .catch(err=>{
+    if(camId){ ls('dockCam',''); live.isScanning?live.stop().then(()=>startLive()):startLive(); return; } // saved lens gone → default
+    stopLive(); alert('Camera blocked ('+err+').\nAllow camera for this site in Chrome settings, or use "Take a photo".');
+  });
+}
+function stopLive(){
+  $('camWrap').classList.remove('fs'); $('camWrap').style.display='none'; $('liveBtn').style.display='block';
+  if(live&&live.isScanning) live.stop().catch(()=>{});
+  try{ wake&&wake.release(); }catch(e){} wake=null; torchOn=false;
+  try{ document.fullscreenElement&&document.exitFullscreen(); }catch(e){}
+}
+
+/* ---------- camera controls: zoom, torch, tap-to-focus, lens ---------- */
+let torchOn=false, CAMS=null;
+function caps(){ try{ return live.getRunningTrackCapabilities()||{}; }catch(e){ return {}; } }
+function applyC(c){ try{ return live.applyVideoConstraints(c).catch(()=>{}); }catch(e){ return Promise.resolve(); } }
+function setupControls(){
+  const c=caps();
+  // zoom: lets checkers hold the phone farther away, where autofocus works better
+  if(c.zoom && c.zoom.max>c.zoom.min){
+    const z=$('zoom'); z.min=c.zoom.min; z.max=Math.min(c.zoom.max,5); z.step=c.zoom.step||0.1;
+    const saved=parseFloat(ls('dockZoom')); z.value=!isNaN(saved)?Math.min(saved,z.max):Math.min(1.5,z.max);
+    $('zoomRow').style.display='flex'; setZoom(z.value);
+    z.oninput=e=>setZoom(e.target.value);
+  } else $('zoomRow').style.display='none';
+  $('torchBtn').style.display=c.torch?'':'none'; $('torchBtn').classList.toggle('on',false);
+  // lens switch only if the phone has more than one back camera
+  (CAMS?Promise.resolve(CAMS):Html5Qrcode.getCameras().then(l=>CAMS=l)).then(l=>{
+    const back=backCams(l); $('lensBtn').style.display=back.length>1?'':'none';
+  }).catch(()=>{});
+}
+function setZoom(v){ v=parseFloat(v); $('zoomVal').textContent=v.toFixed(1)+'x'; ls('dockZoom',String(v)); applyC({advanced:[{zoom:v}]}); }
+function toggleTorch(){ torchOn=!torchOn; $('torchBtn').classList.toggle('on',torchOn); applyC({advanced:[{torch:torchOn}]}); }
+function backCams(l){ const b=(l||[]).filter(x=>/back|rear|environment|後|後置/i.test(x.label)); return b.length?b:(l||[]); }
+function switchLens(){
+  const back=backCams(CAMS); if(back.length<2) return;
+  let cur=ls('dockCam'); let i=back.findIndex(x=>x.id===cur); if(i<0) i=0; // default lens = first back camera
+  const next=back[(i+1)%back.length];
+  ls('dockCam',next.id);
+  const lbl=next.label||('Camera '+((i+1)%back.length+1));
+  live.stop().then(()=>{ startLive(next.id); liveLog('b-info','Lens: '+esc(lbl)+' · press 🔄 again if blurry'); }).catch(()=>{});
+}
+// tap anywhere on the camera to refocus
+$('live').addEventListener('click',()=>{
+  const c=caps(); const g=$('guide'); g.classList.add('focus'); setTimeout(()=>g.classList.remove('focus'),900);
+  const modes=c.focusMode||[];
+  if(modes.includes('single-shot')) applyC({advanced:[{focusMode:'single-shot'}]}).then(()=>setTimeout(()=>applyC({advanced:[{focusMode:'continuous'}]}),1500));
+  else if(modes.includes('continuous')) applyC({advanced:[{focusMode:'manual'}]}).then(()=>applyC({advanced:[{focusMode:'continuous'}]}));
+});
+function onLive(text){
+  const c=String(text||'').trim().toUpperCase(), now=Date.now();
+  if(!c || (c===lastCode && now-lastAt<4000)) return;   // same barcode still in view
+  lastCode=c; lastAt=now;
+  const m=extractKnown(c);
+  if(m.type==='asn'){
+    const r=BY_ASN[m.id];
+    if(r[D]){ flash(getVar('--warn'),'ALREADY TAGGED',m.id+'\n'+(r[TB]||''),700); liveLog('b-warn',`Already tagged · ${esc(m.id)} · ${esc(r[TB]||'')}`); }
+    else { doTag([r[A]],null,true); sess++; $('sessCount').textContent=sess+' tagged'; }
+  } else if(m.type==='po'){
+    const l=BY_PO[m.id], d=l.filter(r=>r[D]).length;
+    flash(getVar('--info'),'PO BARCODE','Scan the ASN barcodes instead',800);
+    liveLog('b-info',`PO ${esc(m.id)} · ${d} of ${l.length} delivered <button class="link" onclick="showPo('${esc(m.id)}')">open list</button>`);
+  } else {
+    flash(getVar('--bad'),'NOT IN FORECAST',c,900);
+    liveLog('b-bad',`Not in forecast · ${esc(c)} <button class="link" onclick="showUnknown('${esc(c)}')">tag anyway</button>`);
+  }
+}
+function liveLog(cls,html){
+  const box=$('liveLog'); if(!box) return;
+  const d=document.createElement('div'); d.className='banner '+cls; d.style.cssText='margin:6px 0;font-size:14px;padding:9px 12px'; d.innerHTML=html;
+  box.prepend(d); while(box.children.length>6) box.lastChild.remove();
+}
+
+refresh(); flushQueue();
+</script>
+</body>
+</html>
